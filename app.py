@@ -10,19 +10,20 @@ from sklearn.metrics.pairwise import cosine_similarity
 import numpy as np
 
 # ----- CONFIG -----
-app = Flask(__name__)
-# secret from env or fallback (use env in production)
+app = Flask(__name__, static_folder="static")
 app.secret_key = os.environ.get("FLASK_SECRET", "dev-secret")
 
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))
-UPLOAD_FOLDER = os.path.join(BASE_DIR, "uploads")
-if not os.path.exists(UPLOAD_FOLDER):
-    os.makedirs(UPLOAD_FOLDER)
 
+# Ensure uploads folder exists
+UPLOAD_FOLDER = os.path.join(BASE_DIR, "uploads")
+os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+
+# Database
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///' + os.path.join(BASE_DIR, 'database.db')
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
-# Mail config (Gmail example)
+# Mail config
 app.config['MAIL_SERVER'] = 'smtp.gmail.com'
 app.config['MAIL_PORT'] = 587
 app.config['MAIL_USE_TLS'] = True
@@ -32,12 +33,11 @@ app.config['MAIL_PASSWORD'] = os.environ.get('MAIL_PASSWORD')
 db = SQLAlchemy(app)
 mail = Mail(app)
 
-# Optional Twilio (SMS) - used only if credentials present
+# Twilio optional
 TWILIO_SID = os.environ.get('TWILIO_SID')
 TWILIO_AUTH = os.environ.get('TWILIO_AUTH')
 TWILIO_FROM = os.environ.get('TWILIO_FROM')
 USE_TWILIO = all([TWILIO_SID, TWILIO_AUTH, TWILIO_FROM])
-
 if USE_TWILIO:
     from twilio.rest import Client
     twilio_client = Client(TWILIO_SID, TWILIO_AUTH)
@@ -51,8 +51,8 @@ class User(db.Model, UserMixin):
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(80), unique=True, nullable=False)
     email = db.Column(db.String(120), unique=True, nullable=False)
-    password = db.Column(db.String(200), nullable=False)  # plaintext for demo; hash in real app
-    phone = db.Column(db.String(30), nullable=True)  # optional SMS
+    password = db.Column(db.String(200), nullable=False)
+    phone = db.Column(db.String(30), nullable=True)
 
 class Item(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -61,9 +61,9 @@ class Item(db.Model):
     name = db.Column(db.String(120))
     description = db.Column(db.Text)
     location = db.Column(db.String(120))
-    contact = db.Column(db.String(120))  # could be email or phone
+    contact = db.Column(db.String(120))
     image_filename = db.Column(db.String(200))
-    features = db.Column(db.Text)  # JSON list
+    features = db.Column(db.Text)
     date = db.Column(db.DateTime, default=datetime.datetime.utcnow)
 
     def feature_array(self):
@@ -95,7 +95,7 @@ def save_image(file_storage):
 def compute_similarity(a, b):
     try:
         return float(cosine_similarity([a], [b])[0][0])
-    except Exception:
+    except:
         return 0.0
 
 @login_manager.user_loader
@@ -149,7 +149,6 @@ def logout():
 @app.route('/dashboard')
 @login_required
 def dashboard():
-    # show user's items
     lost = Item.query.filter_by(user_id=current_user.id, type='lost').all()
     found = Item.query.filter_by(user_id=current_user.id, type='found').all()
     return render_template('dashboard.html', lost=lost, found=found)
@@ -191,34 +190,12 @@ def found():
                           image_filename=filename, features=json.dumps(feats))
         db.session.add(found_item); db.session.commit()
 
-        # match found item against all lost items
         matches = []
         lost_items = Item.query.filter_by(type='lost').all()
         for li in lost_items:
             sim = compute_similarity(np.array(feats), li.feature_array())
             if sim >= 0.75:
                 matches.append({'item': li, 'similarity': round(sim,3)})
-                # notify owner Li via email or phone (contact stored on lost item)
-                # prefer email if it looks like email else attempt phone
-                recipient = li.contact.strip()
-                # send email if Mail configured and recipient contains '@'
-                if mail and recipient and "@" in recipient and app.config.get('MAIL_USERNAME'):
-                    try:
-                        msg = Message("Possible match for your lost item",
-                                      sender=app.config.get('MAIL_USERNAME'),
-                                      recipients=[recipient])
-                        msg.body = f"A match (similarity {round(sim,3)}) was found for your lost item '{li.name}'. Contact finder: {found_item.contact}"
-                        mail.send(msg)
-                    except Exception as e:
-                        print("Mail send failed:", e)
-                # send SMS if Twilio configured and contact looks like phone
-                if USE_TWILIO and recipient and recipient.replace("+","").isdigit():
-                    try:
-                        twilio_client.messages.create(to=recipient, from_=TWILIO_FROM,
-                                                      body=f"Match found for your lost item '{li.name}'. Contact: {found_item.contact}")
-                    except Exception as e:
-                        print("Twilio send failed:", e)
-
         return render_template('results.html', matches=matches, query_image=filename)
     return render_template('found.html')
 
@@ -226,22 +203,17 @@ def found():
 def uploaded_file(filename):
     return send_from_directory(UPLOAD_FOLDER, filename)
 
-# small admin endpoint to wipe data (optional, use carefully)
+# ----- RESET (optional) -----
 @app.route('/reset')
 def reset():
-    # remove files
     for f in os.listdir(UPLOAD_FOLDER):
-        try:
-            os.remove(os.path.join(UPLOAD_FOLDER, f))
-        except:
-            pass
-    # reset db
+        try: os.remove(os.path.join(UPLOAD_FOLDER, f))
+        except: pass
     db.drop_all()
     db.create_all()
     return "Reset complete"
 
-import os
-
+# ----- RUN -----
 if __name__ == '__main__':
-    port = int(os.environ.get('PORT', 5500))
+    port = int(os.environ.get("PORT", 5000))
     app.run(host='0.0.0.0', port=port)
