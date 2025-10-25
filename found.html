@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Report Found Item</title>
+
+  <!-- External CSS from static folder -->
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+
+  <!-- Optional inline styles -->
+  <style>
+    body {
+      margin: 0;
+      height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      background-color: #cfeeff;
+      font-family: Arial, sans-serif;
+    }
+
+    .container {
+      background: white;
+      padding: 30px 50px;
+      border-radius: 10px;
+      box-shadow: 0 0 15px rgba(0,0,0,0.2);
+      text-align: center;
+      max-width: 400px;
+      width: 100%;
+    }
+
+    input, button {
+      margin: 8px 0;
+      padding: 8px;
+      width: 100%;
+      box-sizing: border-box;
+    }
+
+    button {
+      cursor: pointer;
+      background-color: #2196f3;
+      color: white;
+      border: none;
+      border-radius: 5px;
+    }
+
+    a {
+      color: #2196f3;
+      text-decoration: none;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <form method="post" enctype="multipart/form-data" class="fform">
+      <h2>Report Found Item</h2>
+
+      <input name="name" placeholder="Item Name" required>
+      <input name="description" placeholder="Description">
+      <input name="location" placeholder="Location" required>
+      <input name="contact" placeholder="Your Contact (Email or Phone)" required>
+
+      <label for="image">Upload or Capture Image:</label>
+      <input type="file" id="image" name="image" accept="image/*" capture="environment">
+
+      <!-- Live camera preview -->
+      <video id="camera" width="300" height="200" autoplay style="display:none;"></video>
+      <canvas id="snapshot" width="300" height="
